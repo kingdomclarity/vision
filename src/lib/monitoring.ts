@@ -1,38 +1,102 @@
 import { analytics } from './analytics';
 
-// Performance monitoring
-export const monitoring = {
-  // Track page load performance
-  trackPageLoad() {
-    if (window.performance) {
-      const timing = window.performance.timing;
-      const pageLoadTime = timing.loadEventEnd - timing.navigationStart;
-      analytics.trackPerformance('page_load', pageLoadTime);
-    }
-  },
+type Metric = {
+  name: string;
+  value: number;
+  unit: string;
+  timestamp: number;
+};
 
-  // Track API response times
-  trackApiCall(endpoint: string, duration: number) {
-    analytics.trackPerformance(`api_${endpoint}`, duration);
-  },
+type Transaction = {
+  name: string;
+  startTime: number;
+  endTime?: number;
+  metrics: Metric[];
+};
 
-  // Track client-side errors
-  trackError(error: Error, context?: Record<string, any>) {
-    analytics.trackError(error, context);
-  },
+class Monitoring {
+  private static instance: Monitoring;
+  private transactions: Map<string, Transaction> = new Map();
+  private metrics: Metric[] = [];
+  private errorCount = 0;
+  private maxErrors = 1000;
 
-  // Track resource loading
-  trackResourceTiming() {
-    if (window.performance && window.performance.getEntriesByType) {
-      const resources = window.performance.getEntriesByType('resource');
-      resources.forEach(resource => {
-        if (resource instanceof PerformanceResourceTiming) {
-          analytics.trackPerformance(
-            `resource_${resource.initiatorType}`,
-            resource.duration
-          );
+  private constructor() {
+    this.setupPerformanceObserver();
+  }
+
+  private setupPerformanceObserver() {
+    if (typeof PerformanceObserver !== 'undefined') {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          this.trackPerformanceEntry(entry);
         }
+      });
+
+      observer.observe({ 
+        entryTypes: ['navigation', 'resource', 'paint', 'largest-contentful-paint'] 
       });
     }
   }
-};
+
+  startTransaction(name: string) {
+    this.transactions.set(name, {
+      name,
+      startTime: performance.now(),
+      metrics: []
+    });
+  }
+
+  endTransaction(name: string) {
+    const transaction = this.transactions.get(name);
+    if (transaction) {
+      transaction.endTime = performance.now();
+      this.analyzeTransaction(transaction);
+    }
+  }
+
+  private analyzeTransaction(transaction: Transaction) {
+    const duration = transaction.endTime! - transaction.startTime;
+    
+    // Track transaction duration
+    this.addMetric({
+      name: `${transaction.name}_duration`,
+      value: duration,
+      unit: 'ms',
+      timestamp: Date.now()
+    });
+
+    // Analyze metrics
+    if (duration > 1000) { // 1 second threshold
+      analytics.trackEvent('slow_transaction', {
+        transaction: transaction.name,
+        duration,
+        metrics: transaction.metrics
+      });
+    }
+  }
+
+  addMetric(metric: Metric) {
+    this.metrics.push(metric);
+    this.analyzeMetrics();
+  }
+
+  private analyzeMetrics() {
+    // Implement metric analysis
+    // Example: Check for performance anomalies
+  }
+
+  captureError(error: Error, context?: Record<string, any>) {
+    if (this.errorCount >= this.maxErrors) {
+      console.warn('Error limit reached');
+      return;
+    }
+
+    this.errorCount++;
+    analytics.trackError(error, context);
+  }
+
+  // ... rest of the implementation
+}
+
+export const monitoring = Monitoring.getInstance();
