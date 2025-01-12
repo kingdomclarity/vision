@@ -1,0 +1,12 @@
+# Allow all crawlers
+User-agent: *
+Allow: /
+
+# Disallow admin and sensitive routes
+Disallow: /admin
+Disallow: /settings
+Disallow: /upload
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://vision.com/sitemap.xml
